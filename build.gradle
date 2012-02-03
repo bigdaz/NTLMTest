@@ -1,0 +1,12 @@
+apply plugin: 'java'
+apply plugin: 'application'
+apply plugin: 'idea'
+
+mainClassName = "com.gradleware.Tester"
+
+repositories {
+    mavenCentral() 
+}
+dependencies {
+    compile 'org.apache.httpcomponents:httpclient:4.1.2'
+}
