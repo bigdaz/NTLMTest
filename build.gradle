@@ -10,3 +10,4 @@ repositories {
 dependencies {
     compile 'org.apache.httpcomponents:httpclient:4.1.2'
 }
+task wrapper(type: Wrapper)
