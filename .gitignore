@@ -1,5 +1,8 @@
-build
 .gradle
 .idea
 ntlmtest.i*
 out
+build/classes
+build/libs
+build/scripts
+build/tmp
