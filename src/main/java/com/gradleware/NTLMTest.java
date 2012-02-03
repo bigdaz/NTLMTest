@@ -27,10 +27,6 @@ public class NTLMTest {
         this.password = password;
         this.domain = domain;
         this.workstation = workstation;
-        System.out.println("username = " + username);
-        System.out.println("password = " + password);
-        System.out.println("domain = " + domain);
-        System.out.println("workstation = " + workstation);
     }
 
     public static void main(String[] args) throws IOException {
@@ -55,13 +51,21 @@ public class NTLMTest {
                 System.out.println("Usage: ntlmtest <proxyHost> <proxyPort> <user> <password> [<domain> [<workstation>]]");
                 return;
         }
-        
+
+        System.out.println("proxyHost = " + proxyHost);
+        System.out.println("proxyPort = " + proxyPort);
+        System.out.println("username = " + username);
+        System.out.println("password = " + password);
+        System.out.println("domain = " + domain);
+        System.out.println("workstation = " + workstation);
+
         System.setProperty("http.proxyHost", proxyHost);
         System.setProperty("http.proxyPort", proxyPort);
 
         NTLMTest test = new NTLMTest(username, password, domain, workstation);
         test.testJavaNetURL();
         test.testHttpClientNative();
+        test.testHttpClientJCIFS();
     }
 
     public void testJavaNetURL() throws IOException {
@@ -78,7 +82,20 @@ public class NTLMTest {
 
     public void testHttpClientNative() throws IOException {
         DefaultHttpClient httpClient = new DefaultHttpClient();
-        
+
+        int lines = getLinesHttpClient(httpClient);
+        System.out.println(String.format("HttpClient native: got %s lines from http://gradle.org", lines));
+    }
+
+    public void testHttpClientJCIFS() throws IOException {
+        DefaultHttpClient httpClient = new DefaultHttpClient();
+        NTLMSchemeFactory.register(httpClient);
+
+        int lines = getLinesHttpClient(httpClient);
+        System.out.println(String.format("HttpClient JCIFS: got %s lines from http://gradle.org", lines));
+    }
+
+    private int getLinesHttpClient(DefaultHttpClient httpClient) throws IOException {
         ProxySelectorRoutePlanner routePlanner = new ProxySelectorRoutePlanner(httpClient.getConnectionManager().getSchemeRegistry(), ProxySelector.getDefault());
         httpClient.setRoutePlanner(routePlanner);
 
@@ -88,8 +105,7 @@ public class NTLMTest {
         HttpGet getRequest = new HttpGet("http://gradle.org");
         HttpResponse httpResponse = httpClient.execute(getRequest);
 
-        int lines = countLines(httpResponse.getEntity().getContent());
-        System.out.println(String.format("HttpClient: got %s lines from http://gradle.org", lines));
+        return countLines(httpResponse.getEntity().getContent());
     }
 
     private int countLines(InputStream inStream) throws IOException {
