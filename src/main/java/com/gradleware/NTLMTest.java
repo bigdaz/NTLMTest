@@ -12,9 +12,13 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.net.Authenticator;
 import java.net.HttpURLConnection;
+import java.net.PasswordAuthentication;
 import java.net.ProxySelector;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.List;
 
 public class NTLMTest {
     private final String username;
@@ -61,38 +65,113 @@ public class NTLMTest {
 
         System.setProperty("http.proxyHost", proxyHost);
         System.setProperty("http.proxyPort", proxyPort);
+        
+        configureLogging();
 
         NTLMTest test = new NTLMTest(username, password, domain, workstation);
-        test.testJavaNetURL();
-        test.testHttpClientNative();
-        test.testHttpClientJCIFS();
+        test.executeTests();
     }
 
-    public void testJavaNetURL() throws IOException {
-        System.setProperty("http.proxyUser", username);
-        System.setProperty("http.proxyPassword", password);
-        System.setProperty("http.auth.ntlm.domain", domain);
-
-        URL url = new URL("http://gradle.org");
-        HttpURLConnection urlConnection = (HttpURLConnection) url.openConnection();
-        urlConnection.setUseCaches(false);
-        int lines = countLines(urlConnection.getInputStream());
-        System.out.println(String.format("java.net.URL: got %s lines from http://gradle.org", lines));
+    private static void configureLogging() {
+        System.setProperty("org.apache.commons.logging.Log", "org.apache.commons.logging.impl.SimpleLog");
+        System.setProperty("org.apache.commons.logging.simplelog.showdatetime", "true");
+        System.setProperty("org.apache.commons.logging.simplelog.log.org.apache.http", "DEBUG");
+        System.setProperty("org.apache.commons.logging.simplelog.log.org.apache.http.wire", "ERROR");
     }
 
-    public void testHttpClientNative() throws IOException {
-        DefaultHttpClient httpClient = new DefaultHttpClient();
+    void executeTests() {
+        List<ProxyTest> tests = new ArrayList<ProxyTest>();
+        tests.add(new JavaNetUrlTest());
+        tests.add(new NativeHttpClientTest());
+        tests.add(new JCIFSHttpClientTest());
+        
+        List<String> results = new ArrayList<String>();
 
-        int lines = getLinesHttpClient(httpClient);
-        System.out.println(String.format("HttpClient native: got %s lines from http://gradle.org", lines));
+        for (ProxyTest test : tests) {
+            System.out.println("---------------------------------------------------------------");
+            System.out.println("EXECUTING: " + test.getName());
+            try {
+                test.execute();
+
+                String result = "Test [" + test.getName() + "] SUCCEEDED";
+                results.add(result);
+                System.out.println(result);
+            } catch (Exception e) {
+                String result = "Test [" + test.getName() + "] FAILED: " + e.getMessage();
+                results.add(result);
+                System.out.println(result);
+                e.printStackTrace();
+                System.out.flush();
+            }
+            System.out.println("---------------------------------------------------------------");
+        }
+        
+        System.out.flush();
+        System.err.flush();
+
+        System.out.println("---------------------------------------------------------------");
+        System.out.println("Overall Results");
+        for (String result : results) {
+            System.out.println(result);
+        }
+        System.out.println("---------------------------------------------------------------");
+    }
+    
+    private class JavaNetUrlTest implements ProxyTest
+    {
+        public String getName() {
+            return "java.net.URL";
+        }
+
+        public void execute() throws Exception {
+            System.setProperty("http.proxyUser", username);
+            System.setProperty("http.proxyPassword", password);
+            System.setProperty("http.auth.ntlm.domain", domain);
+            System.setProperty("http.nonProxyHosts", "");
+
+            configureProxyAuthentication();
+
+            URL url = new URL("http://gradle.org");
+            HttpURLConnection urlConnection = (HttpURLConnection) url.openConnection();
+            urlConnection.setUseCaches(false);
+            int lines = countLines(urlConnection.getInputStream());
+            System.out.println(String.format("java.net.URL: got %s lines from http://gradle.org", lines));
+        }
+
+        private void configureProxyAuthentication() {
+            if (System.getProperty("http.proxyUser") != null) {
+                Authenticator.setDefault(new SystemPropertiesProxyAuthenticator());
+            }
+        }
     }
 
-    public void testHttpClientJCIFS() throws IOException {
-        DefaultHttpClient httpClient = new DefaultHttpClient();
-        NTLMSchemeFactory.register(httpClient);
+    private class NativeHttpClientTest implements ProxyTest
+    {
+        public String getName() {
+            return "Native HTTP client";
+        }
 
-        int lines = getLinesHttpClient(httpClient);
-        System.out.println(String.format("HttpClient JCIFS: got %s lines from http://gradle.org", lines));
+        public void execute() throws Exception {
+            DefaultHttpClient httpClient = new DefaultHttpClient();
+
+            int lines = getLinesHttpClient(httpClient);
+            System.out.println(String.format("HttpClient native: got %s lines from http://gradle.org", lines));
+        }
+    }
+
+    private class JCIFSHttpClientTest implements ProxyTest
+    {
+        public String getName() {
+            return "HTTPClient with JCIFS";
+        }
+
+        public void execute() throws Exception {
+            DefaultHttpClient httpClient = new DefaultHttpClient();
+            NTLMSchemeFactory.register(httpClient);
+    
+            int lines = getLinesHttpClient(httpClient);
+            System.out.println(String.format("HttpClient JCIFS: got %s lines from http://gradle.org", lines));
+        }
     }
 
     private int getLinesHttpClient(DefaultHttpClient httpClient) throws IOException {
@@ -104,8 +183,10 @@ public class NTLMTest {
 
         HttpGet getRequest = new HttpGet("http://gradle.org");
         HttpResponse httpResponse = httpClient.execute(getRequest);
-
-        return countLines(httpResponse.getEntity().getContent());
+        if (httpResponse.getStatusLine().getStatusCode() == 200) {
+            return countLines(httpResponse.getEntity().getContent());            
+        }
+        throw new RuntimeException("Request failed: " + httpResponse.getStatusLine());
     }
 
     private int countLines(InputStream inStream) throws IOException {
@@ -117,4 +198,14 @@ public class NTLMTest {
         }
         return lines;
     }
+
+    private static class SystemPropertiesProxyAuthenticator extends Authenticator {
+        @Override
+        protected PasswordAuthentication getPasswordAuthentication() {
+            return new PasswordAuthentication(
+                    System.getProperty("http.proxyUser"),
+                    System.getProperty("http.proxyPassword", "").toCharArray());
+        }
+    }
+
 }

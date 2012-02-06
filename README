@@ -1,9 +1,13 @@
-Getting started
------------------
+To run the test
+---------------
 
-1) ./gradlew install
-2) build/install/NTLMTest/bin/NTLMTest myProxy myProxyPort myProxyUser myProxyPassword
+./build/install/ntlmtest/bin/ntlmtest myProxy myProxyPort myProxyUser myProxyPassword
 
 If this doesn't work, try adding domain and optional workstation values
-3) build/install/NTLMTest/bin/NTLMTest myProxy myProxyPort myProxyUser myProxyPassword myProxyDomain myProxyWorkstation
+./build/install/NTLMTest/bin/NTLMTest myProxy myProxyPort myProxyUser myProxyPassword myProxyDomain myProxyWorkstation
+
+To build the app
+----------------
+
+./gradlew install
 
